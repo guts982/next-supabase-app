@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>P2P Chat - Supabase + WebRTC</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/supabase-js/2.39.3/umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+            width: 100%;
+            max-width: 500px;
+            height: 600px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .header {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            padding: 20px;
+            text-align: center;
+        }
+
+        .status {
+            font-size: 14px;
+            opacity: 0.9;
+            margin-top: 5px;
+        }
+
+        .setup {
+            padding: 20px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+
+        .input-group {
+            margin-bottom: 15px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: 600;
+            color: #374151;
+        }
+
+        input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus {
+            outline: none;
+            border-color: #6366f1;
+        }
+
+        button {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-weight: 600;
+            transition: transform 0.2s;
+            width: 100%;
+        }
+
+        button:hover {
+            transform: translateY(-2px);
+        }
+
+        button:disabled {
+            background: #9ca3af;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .chat-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            height: 0; /* Important for flex child */
+        }
+
+        .messages {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+            background: #f9fafb;
+        }
+
+        .message {
+            margin-bottom: 15px;
+            padding: 12px 16px;
+            border-radius: 18px;
+            max-width: 80%;
+            animation: slideIn 0.3s ease;
+        }
+
+        .message.sent {
+            background: linear-gradient(135deg, #6366f1, #8b5cf6);
+            color: white;
+            margin-left: auto;
+            text-align: right;
+        }
+
+        .message.received {
+            background: white;
+            color: #374151;
+            border: 1px solid #e5e7eb;
+        }
+
+        .message-input {
+            display: flex;
+            padding: 20px;
+            gap: 10px;
+            border-top: 1px solid #e5e7eb;
+            background: white;
+        }
+
+        .message-input input {
+            flex: 1;
+            margin: 0;
+        }
+
+        .message-input button {
+            width: auto;
+            padding: 12px 20px;
+        }
+
+        @keyframes slideIn {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .connection-indicator {
+            padding: 10px;
+            text-align: center;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .connection-indicator.disconnected {
+            background: #fef2f2;
+            color: #dc2626;
+        }
+
+        .connection-indicator.connecting {
+            background: #fefbef;
+            color: #d97706;
+        }
+
+        .connection-indicator.connected {
+            background: #f0fdf4;
+            color: #16a34a;
+        }
+
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🔗 P2P Chat</h1>
+            <div class="status" id="status">Enter your Supabase credentials to start</div>
+        </div>
+
+        <div class="setup" id="setup">
+            <div class="input-group">
+                <label>Supabase URL:</label>
+                <input type="text" id="supabaseUrl" placeholder="https://your-project.supabase.co">
+            </div>
+            <div class="input-group">
+                <label>Supabase Anon Key:</label>
+                <input type="text" id="supabaseKey" placeholder="Your anon key">
+            </div>
+            <div class="input-group">
+                <label>Room ID:</label>
+                <input type="text" id="roomId" placeholder="Enter room name (e.g., room123)">
+            </div>
+            <button onclick="initializeChat()">Join Chat Room</button>
+        </div>
+
+        <div class="chat-container hidden" id="chatContainer">
+            <div class="connection-indicator disconnected" id="connectionStatus">
+                Disconnected - Waiting for peer...
+            </div>
+            
+            <div class="messages" id="messages"></div>
+            
+            <div class="message-input">
+                <input type="text" id="messageInput" placeholder="Type your message..." 
+                       onkeypress="handleKeyPress(event)" disabled>
+                <button onclick="sendMessage()" id="sendBtn" disabled>Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let supabase = null;
+        let pc = null;
+        let dataChannel = null;
+        let currentRoomId = null;
+        let peerId = null;
+        let isInitiator = false;
+        let signalChannel = null;
+
+        // Generate unique peer ID
+        function generatePeerId() {
+            return 'peer_' + Math.random().toString(36).substr(2, 9);
+        }
+
+        async function initializeChat() {
+            const url = document.getElementById('supabaseUrl').value.trim();
+            const key = document.getElementById('supabaseKey').value.trim();
+            const roomId = document.getElementById('roomId').value.trim();
+
+            if (!url || !key || !roomId) {
+                alert('Please fill in all fields');
+                return;
+            }
+
+            try {
+                // Initialize Supabase
+                supabase = window.supabase.createClient(url, key);
+                currentRoomId = roomId;
+                peerId = generatePeerId();
+
+                updateStatus('Connecting to room...');
+                
+                // Check if we're the first in the room
+                const { data: existingPeers } = await supabase
+                    .from('signaling')
+                    .select('peer_id')
+                    .eq('room_id', roomId)
+                    .order('created_at', { ascending: false })
+                    .limit(10);
+
+                isInitiator = !existingPeers || existingPeers.length === 0;
+
+                // Setup WebRTC
+                setupWebRTC();
+                
+                // Setup Supabase signaling
+                setupSignaling();
+
+                // Show chat interface
+                document.getElementById('setup').classList.add('hidden');
+                document.getElementById('chatContainer').classList.remove('hidden');
+
+                if (isInitiator) {
+                    updateStatus('Waiting for peer to join...');
+                    setTimeout(() => createOffer(), 1000);
+                } else {
+                    updateStatus('Joining room...');
+                }
+
+            } catch (error) {
+                console.error('Error initializing chat:', error);
+                alert('Error connecting to Supabase. Check your credentials.');
+            }
+        }
+
+        function setupWebRTC() {
+            const config = {
+                iceServers: [
+                    { urls: "stun:stun.l.google.com:19302" },
+                    { urls: "stun:stun1.l.google.com:19302" }
+                ]
+            };
+
+            pc = new RTCPeerConnection(config);
+
+            // Create data channel for messages
+            if (isInitiator) {
+                dataChannel = pc.createDataChannel('messages');
+                setupDataChannel(dataChannel);
+            }
+
+            // Handle incoming data channel
+            pc.ondatachannel = (event) => {
+                const channel = event.channel;
+                setupDataChannel(channel);
+            };
+
+            // Handle ICE candidates
+            pc.onicecandidate = (event) => {
+                if (event.candidate) {
+                    sendSignal({
+                        type: 'ice-candidate',
+                        candidate: event.candidate
+                    });
+                }
+            };
+
+            // Handle connection state changes
+            pc.onconnectionstatechange = () => {
+                console.log('Connection state:', pc.connectionState);
+                updateConnectionIndicator();
+            };
+
+            pc.oniceconnectionstatechange = () => {
+                console.log('ICE connection state:', pc.iceConnectionState);
+                updateConnectionIndicator();
+            };
+        }
+
+        function setupDataChannel(channel) {
+            dataChannel = channel;
+
+            dataChannel.onopen = () => {
+                console.log('Data channel opened');
+                updateConnectionIndicator();
+                document.getElementById('messageInput').disabled = false;
+                document.getElementById('sendBtn').disabled = false;
+            };
+
+            dataChannel.onclose = () => {
+                console.log('Data channel closed');
+                updateConnectionIndicator();
+                document.getElementById('messageInput').disabled = true;
+                document.getElementById('sendBtn').disabled = true;
+            };
+
+            dataChannel.onmessage = (event) => {
+                const message = JSON.parse(event.data);
+                displayMessage(message.text, false);
+            };
+
+            dataChannel.onerror = (error) => {
+                console.error('Data channel error:', error);
+            };
+        }
+
+        async function setupSignaling() {
+            // Subscribe to signaling messages
+            signalChannel = supabase
+                .channel(`signaling-${currentRoomId}`)
+                .on('postgres_changes', {
+                    event: 'INSERT',
+                    schema: 'public',
+                    table: 'signaling',
+                    filter: `room_id=eq.${currentRoomId}`
+                }, async (payload) => {
+                    const signal = payload.new;
+                    
+                    // Ignore our own messages
+                    if (signal.peer_id === peerId) return;
+
+                    console.log('Received signal:', signal.type);
+                    await handleSignal(signal);
+                })
+                .subscribe();
+        }
+
+        async function sendSignal(signal) {
+            try {
+                await supabase.from('signaling').insert({
+                    room_id: currentRoomId,
+                    peer_id: peerId,
+                    type: signal.type,
+                    data: signal
+                });
+            } catch (error) {
+                console.error('Error sending signal:', error);
+            }
+        }
+
+        async function handleSignal(signal) {
+            try {
+                const data = signal.data;
+
+                switch (data.type) {
+                    case 'offer':
+                        await pc.setRemoteDescription(data.offer);
+                        const answer = await pc.createAnswer();
+                        await pc.setLocalDescription(answer);
+                        await sendSignal({
+                            type: 'answer',
+                            answer: answer
+                        });
+                        updateStatus('Connected! You can now chat.');
+                        break;
+
+                    case 'answer':
+                        await pc.setRemoteDescription(data.answer);
+                        updateStatus('Connected! You can now chat.');
+                        break;
+
+                    case 'ice-candidate':
+                        await pc.addIceCandidate(data.candidate);
+                        break;
+                }
+            } catch (error) {
+                console.error('Error handling signal:', error);
+            }
+        }
+
+        async function createOffer() {
+            try {
+                const offer = await pc.createOffer();
+                await pc.setLocalDescription(offer);
+                await sendSignal({
+                    type: 'offer',
+                    offer: offer
+                });
+                updateStatus('Offer sent, waiting for response...');
+            } catch (error) {
+                console.error('Error creating offer:', error);
+            }
+        }
+
+        function sendMessage() {
+            const input = document.getElementById('messageInput');
+            const text = input.value.trim();
+
+            if (!text || !dataChannel || dataChannel.readyState !== 'open') {
+                return;
+            }
+
+            const message = {
+                text: text,
+                timestamp: Date.now()
+            };
+
+            // Send through WebRTC data channel
+            dataChannel.send(JSON.stringify(message));
+            
+            // Display in our chat
+            displayMessage(text, true);
+            
+            // Clear input
+            input.value = '';
+        }
+
+        function displayMessage(text, isSent) {
+            const messagesContainer = document.getElementById('messages');
+            const messageDiv = document.createElement('div');
+            messageDiv.className = `message ${isSent ? 'sent' : 'received'}`;
+            messageDiv.textContent = text;
+            
+            messagesContainer.appendChild(messageDiv);
+            messagesContainer.scrollTop = messagesContainer.scrollHeight;
+        }
+
+        function handleKeyPress(event) {
+            if (event.key === 'Enter') {
+                sendMessage();
+            }
+        }
+
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+
+        function updateConnectionIndicator() {
+            const indicator = document.getElementById('connectionStatus');
+            
+            if (dataChannel && dataChannel.readyState === 'open') {
+                indicator.textContent = '🟢 Connected - Messages are P2P encrypted';
+                indicator.className = 'connection-indicator connected';
+            } else if (pc && (pc.connectionState === 'connecting' || pc.iceConnectionState === 'checking')) {
+                indicator.textContent = '🟡 Connecting to peer...';
+                indicator.className = 'connection-indicator connecting';
+            } else {
+                indicator.textContent = '🔴 Disconnected - Waiting for peer...';
+                indicator.className = 'connection-indicator disconnected';
+            }
+        }
+
+        // Cleanup on page unload
+        window.addEventListener('beforeunload', () => {
+            if (signalChannel) {
+                signalChannel.unsubscribe();
+            }
+            if (pc) {
+                pc.close();
+            }
+        });
+    </script>
+</body>
+</html>
