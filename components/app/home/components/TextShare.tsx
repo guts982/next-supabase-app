@@ -2,23 +2,19 @@
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import React, { useEffect, useState } from "react";
+import React, {  useState } from "react";
 import useWebrtc, { Message } from "@/hooks/useWebrtc";
 import { Input } from "@/components/ui/input";
 
 const TextShare = () => {
   const [messageInput, setMessageInput] = useState("");
   const {
-    supabase,
-    pcRef,
     connectionState,
     messages,
     currentRoomId,
     setCurrentRoomId,
     joinRoom,
     sendMessage,
-    disconnect,
-    canSendMessage,
   } = useWebrtc();
 
   const createOrJoin = async () => {

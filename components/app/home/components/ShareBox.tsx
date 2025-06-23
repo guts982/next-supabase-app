@@ -1,7 +1,5 @@
 "use client";
-import React, { useState } from "react";
-import FileShare from "./FileShare";
-import { TextSearch } from "lucide-react";
+import React from "react";
 import TextShare from "./TextShare";
 
 const ShareBox = () => {
@@ -26,6 +24,3 @@ const ShareBox = () => {
 
 export default ShareBox;
 
-function generatePeerId() {
-  return "peer_" + Math.random().toString(36).substr(2, 9);
-}

@@ -2,12 +2,11 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { createClient } from '@/lib/client';
-import { useWebRTC, ConnectionState } from '@/hooks/use-webrtc';
+import { useWebRTC } from '@/hooks/use-webrtc';
 
 export default function P2PChat() {
-  const supabase = createClient();
-  const { connectionState, messages, currentRoomId, joinRoom, sendMessage, disconnect, canSendMessage } = useWebRTC();
+
+  const { connectionState, messages,  joinRoom, sendMessage,  canSendMessage } = useWebRTC();
   
   const [setupData, setSetupData] = useState({
     roomId: ''
