@@ -23,7 +23,9 @@ const useWebRTC = () => {
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("disconnected");
   const [messages, setMessages] = useState<Message[]>([]);
-  const [currentRoomId, setCurrentRoomId] = useState<string | null>(null);
+  const [currentRoomId, setCurrentRoomId] = useState<string>("");
+  const currentRoomIdRef = useRef<string>("");
+
   const peerIdRef = useRef<string>(generatePeerId());
   const isInitiatorRef = useRef<boolean>(false);
   const signalChannelRef = useRef<any>(null);
@@ -36,12 +38,35 @@ const useWebRTC = () => {
     // Create data channel for messages (initiator only)
     if (isInitiatorRef.current) {
       const dataChannel = pc.createDataChannel("messages");
-      // setupDataChannel(dataChannel);
+      setupDataChannel(dataChannel);
     }
 
     // Handle incoming data channel
     pc.ondatachannel = (event) => {
-      // setupDataChannel(event.channel);
+      console.log("Data channel received!");
+      setupDataChannel(event.channel);
+    };
+
+    // Handle ICE candidates
+    pc.onicecandidate = (event) => {
+      console.log("ICE channel received!");
+      if (event.candidate) {
+        sendSignal({
+          type: "ice-candidate",
+          candidate: event.candidate,
+        });
+      }
+    };
+
+    // Handle connection state changes
+    pc.onconnectionstatechange = () => {
+      console.log("Connection state:", pc.connectionState);
+      updateConnectionState();
+    };
+
+    pc.oniceconnectionstatechange = () => {
+      console.log("ICE connection state:", pc.iceConnectionState);
+      updateConnectionState();
     };
   }, []);
 
@@ -73,15 +98,18 @@ const useWebRTC = () => {
 
   const sendSignal = useCallback(
     async (signal: any) => {
-      if (!supabase || !currentRoomId) {
-        console.error(
-          "Failed to send signal as supabase or roomid not initialized!"
-        );
+      console.log("Sending Signal: ", signal);
+      if (!supabase) {
+        console.error("Failed to send signal as supabase not initialized!");
+        return;
+      }
+      if (!currentRoomIdRef.current) {
+        console.error("Failed to send signal as roomid not initialized!");
         return;
       }
       try {
         await supabase.from("signaling").insert({
-          room_id: currentRoomId,
+          room_id: currentRoomIdRef.current,
           peer_id: peerIdRef.current,
           type: signal.type,
           data: signal,
@@ -103,6 +131,7 @@ const useWebRTC = () => {
         const data = signal.data;
         switch (data.type) {
           case "offer":
+            console.log("Received offer:", data);
             await pcRef.current?.setRemoteDescription(data.offer);
             const answer = await pcRef.current.createAnswer();
             await pcRef.current.setLocalDescription(answer);
@@ -113,10 +142,12 @@ const useWebRTC = () => {
             break;
 
           case "answer":
+            console.log("Received answer:", data);
             await pcRef.current.setRemoteDescription(data.answer);
             break;
 
           case "ice-candidate":
+            console.log("Received ICE candidate:", data);
             await pcRef.current.addIceCandidate(data.candidate);
             break;
         }
@@ -128,22 +159,24 @@ const useWebRTC = () => {
   );
 
   const setupSignaling = useCallback(async () => {
-    if (!supabase || !currentRoomId) {
-      console.error(
-        "Failed to setup signaling as supabase or roomid not initialized!"
-      );
+    if (!supabase) {
+      console.error("Failed to setup signaling as supabase not initialized!");
+      return;
+    }
+    if (!currentRoomIdRef.current) {
+      console.error("Failed to setup signaling as roomid not initialized!");
       return;
     }
     // Subscribe to signaling messages
     const channel = supabase
-      .channel(`supabase-${currentRoomId}`)
+      .channel(`supabase-${currentRoomIdRef.current}`)
       .on(
         "postgres_changes",
         {
           event: "INSERT",
           schema: "public",
           table: "signaling",
-          filter: `room_id=eq.${currentRoomId}`,
+          filter: `room_id=eq.${currentRoomIdRef.current}`,
         },
         async (payload) => {
           const signal = payload.new;
@@ -157,10 +190,12 @@ const useWebRTC = () => {
           await handleSignal(signal);
         }
       )
-      .subscribe();
+      .subscribe((status) => {
+        console.log("Realtime subscription status:", status);
+      });
 
     signalChannelRef.current = channel;
-  }, [supabase, currentRoomId, handleSignal]);
+  }, [supabase, handleSignal]);
 
   const createOffer = useCallback(async () => {
     if (!pcRef.current) {
@@ -168,39 +203,51 @@ const useWebRTC = () => {
       return;
     }
     try {
-        const offer = await pcRef.current.createOffer();
-        await pcRef.current.setLocalDescription(offer);
-        await sendSignal({
-            type:'offer',
-            offer: offer
-        });
+      const offer = await pcRef.current.createOffer();
+      await pcRef.current.setLocalDescription(offer);
+      await sendSignal({
+        type: "offer",
+        offer: offer,
+      });
     } catch (error) {
-        console.error('Error creating offer: ', error)
+      console.error("Error creating offer: ", error);
     }
   }, [sendSignal]);
 
-  const updateConnectionState = useCallback(()=>{
+  const updateConnectionState = useCallback(() => {
     const pc = pcRef.current;
     const dataChannel = dataChannelRef.current;
-    if(dataChannel && dataChannel.readyState == 'open') {
-        setConnectionState('connected');
-    } else if (pc && (pc.connectionState == 'connecting' || pc.iceConnectionState == 'checking')) {
-          setConnectionState('connecting');
+    if (dataChannel && dataChannel.readyState == "open") {
+      setConnectionState("connected");
+    } else if (
+      pc &&
+      (pc.connectionState == "connecting" ||
+        pc.iceConnectionState == "checking")
+    ) {
+      setConnectionState("connecting");
     } else {
-        setConnectionState('disconnected');
+      setConnectionState("disconnected");
     }
-  },[])
+  }, []);
 
-  const joinRoom = useCallback(async (roomId: string) => {
+  const joinRoom = useCallback(async () => {
     if (!supabase) {
-         throw new Error( "Failed to join room as supabase not initialized!");
+      throw new Error("Failed to join room as supabase not initialized!");
     }
-    setCurrentRoomId(roomId);
+    if (!currentRoomIdRef.current) {
+      console.error("Failed to join room as roomid not initialized!");
+      return;
+    }
     setConnectionState("connecting");
+    // Register peer in the peer_sessions table
+    await supabase.from("peer_sessions").insert({
+      room_id: currentRoomIdRef.current,
+      peer_id: peerIdRef.current,
+    });
     const { data: existingPeers } = await supabase
       .from("signaling")
       .select("peer_id")
-      .eq("room_id", roomId)
+      .eq("room_id", currentRoomIdRef.current)
       .order("created_at", { ascending: false })
       .limit(10);
 
@@ -210,26 +257,150 @@ const useWebRTC = () => {
     await setupSignaling();
 
     // If initiator, create offer after a short delay
-     if (isInitiatorRef.current) {
+    if (isInitiatorRef.current) {
       setTimeout(() => createOffer(), 1000);
     }
-  }, [supabase, setupWebRTC, setupSignaling, createOffer]);
 
+    if (!isInitiatorRef.current) {
+      // Check for existing offer in the room
+      const { data: signals } = await supabase
+        .from("signaling")
+        .select("*")
+        .eq("room_id", currentRoomIdRef.current)
+        .order("created_at", { ascending: true });
 
-  const sendMessage = useCallback((text:string) => {
-  const dataChannel = dataChannelRef.current;
-      if (!text.trim() || !dataChannel || dataChannel.readyState !== 'open') {
-        console.error('Data channel not ready!')
+      if (signals && signals.length > 0) {
+        for (const signal of signals) {
+          if (signal.peer_id !== peerIdRef.current) {
+            console.log("[Late Join] Processing past signal:", signal.type);
+            await handleSignal(signal);
+          }
+        }
+      }
+    }
+  }, [supabase, setupWebRTC, setupSignaling, createOffer, handleSignal]);
+
+  const sendMessage = useCallback((text: string) => {
+    const dataChannel = dataChannelRef.current;
+    if (!text.trim() || !dataChannel || dataChannel.readyState !== "open") {
+      console.error("Data channel not ready!");
       return false;
     }
-  },[])
+    const message = {
+      text: text.trim(),
+      timestamp: Date.now(),
+    };
 
-  useEffect(() => {}, [supabase]);
+    // Send through WebRTC data channel
+    dataChannel.send(JSON.stringify(message));
 
-  return {};
+    // Add to local messages
+    setMessages((prev) => [
+      ...prev,
+      {
+        text: message.text,
+        timestamp: message.timestamp,
+        isSent: true,
+      },
+    ]);
+
+    return true;
+  }, []);
+
+  // const disconnect = useCallback(() => {
+  //   // Close data channel
+  //   if (dataChannelRef.current) {
+  //     dataChannelRef.current.close();
+  //     dataChannelRef.current = null;
+  //   }
+
+  //   // Close peer connection
+  //   if (pcRef.current) {
+  //     pcRef.current.close();
+  //     pcRef.current = null;
+  //   }
+
+  //   // Unsubscribe from signaling
+  //   if (signalChannelRef.current) {
+  //     signalChannelRef.current.unsubscribe();
+  //     signalChannelRef.current = null;
+  //   }
+
+  //   setConnectionState("disconnected");
+  //   setCurrentRoomId("");
+  //   setMessages([]);
+  // }, []);
+
+  const disconnect = useCallback(async () => {
+    // Unregister this peer from peer_sessions
+    await supabase
+      .from("peer_sessions")
+      .delete()
+      .eq("room_id", currentRoomIdRef.current)
+      .eq("peer_id", peerIdRef.current);
+
+    // Check if any peers remain in the room
+    const { data: remainingPeers, error } = await supabase
+      .from("peer_sessions")
+      .select("id")
+      .eq("room_id", currentRoomIdRef.current);
+
+    if (!error && remainingPeers && remainingPeers.length === 0) {
+      console.log("Last peer disconnected. Cleaning up signaling messages...");
+      await supabase
+        .from("signaling")
+        .delete()
+        .eq("room_id", currentRoomIdRef.current);
+    }
+
+    // Close data channel
+    if (dataChannelRef.current) {
+      dataChannelRef.current.close();
+      dataChannelRef.current = null;
+    }
+
+    // Close peer connection
+    if (pcRef.current) {
+      pcRef.current.close();
+      pcRef.current = null;
+    }
+
+    // Unsubscribe from signaling
+    if (signalChannelRef.current) {
+      signalChannelRef.current.unsubscribe();
+      signalChannelRef.current = null;
+    }
+
+    setConnectionState("disconnected");
+    setCurrentRoomId("");
+    setMessages([]);
+  }, []);
+
+  useEffect(() => {
+    currentRoomIdRef.current = currentRoomId;
+  }, [currentRoomId]);
+
+  useEffect(() => {
+    return () => {
+      disconnect();
+    };
+  }, [disconnect]);
+
+  return {
+    pcRef,
+    supabase,
+    connectionState,
+    messages,
+    currentRoomId,
+    setCurrentRoomId,
+    joinRoom,
+    sendMessage,
+    disconnect,
+    canSendMessage: connectionState === "connected",
+  };
 };
 
-export default useWebRTC();
+export default useWebRTC;
 
 export function generatePeerId() {
   return "peer_" + generateRandomString(8);
