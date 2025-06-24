@@ -1,16 +1,21 @@
-"use client";
-
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import React from 'react';
-import ShareBox from './components/ShareBox';
+import ShareRoom from './components/ShareRoom';
+import ShareRoomP2P from './components/ShareRoomP2P';
 
 const Index = () => {
+
+
+
+
     return (
-        <>
-        {/* <Hero /> */}
-          <main className="border w-full flex-1 flex flex-col gap-6 p-4">
-           <ShareBox />
-          </main>
-        </>
+        <div className='borde  min-h-[70vh] mt-4 rounded-sm'>
+            <div className='grid gap-2 w-full grid-cols-2'>
+               <ShareRoom />
+               <ShareRoomP2P />
+            </div>
+        </div>
     );
 };
 
