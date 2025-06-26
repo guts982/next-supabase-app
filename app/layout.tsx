@@ -15,6 +15,7 @@ export const metadata: Metadata = {
   metadataBase: new URL(defaultUrl),
   title: "Next.js and Supabase Starter Kit",
   description: "The fastest way to build apps with Next.js and Supabase",
+  manifest: '/manifest.json',
 };
 
 const geistSans = Geist({
@@ -34,6 +35,9 @@ export default async function RootLayout({
 
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <meta name="apple-mobile-web-app-title" content="Share App" />
+      </head>
       <body className={`${geistSans.className} antialiased`}>
         <AuthContextProvider initialClientId={clientId}>
         <ThemeProvider

@@ -26,7 +26,7 @@ interface RoomMessage {
 const usePersistentShare = () => {
   const supabase = createClient();
   const router = useRouter();
-  const { clientId, guestUser, authUser } = useAuthContext();
+  const {  guestUser, authUser } = useAuthContext();
 
   const [displayTextContent, setDisplayTextContent] = useState("");
 
