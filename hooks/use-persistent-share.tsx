@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { createClient } from "@/lib/supabase/client";
 import { useAuthContext } from "@/context/AuthContext";
 
@@ -13,6 +14,14 @@ type Room = {
   guest_id?: string;
   [key: string]: any;
 };
+interface RoomMessage {
+  id: string;
+  content: string;
+  room_id: string;
+  sender_user_id?: string;
+  sender_guest_id?: string;
+  sent_at: string;
+}
 
 const usePersistentShare = () => {
   const supabase = createClient();
@@ -278,6 +287,48 @@ const usePersistentShare = () => {
   useEffect(() => {
     if (currentRoom) {
       getRoomMessages();
+
+      const subscription = supabase
+        .channel("room_messages_changes")
+        .on(
+          "postgres_changes",
+          {
+            event: "*",
+            schema: "public",
+            table: "room_messages",
+            filter: `room_id=eq.${currentRoom.id}`,
+          },
+          (payload: RealtimePostgresChangesPayload<RoomMessage>) => {
+            console.log("Change received!", payload);
+
+            if (payload.eventType === "INSERT" && payload.new) {
+              setRoomMessages((prev: RoomMessage[]) => [
+                payload.new as RoomMessage,
+                ...prev,
+              ]);
+            } else if (payload.eventType === "UPDATE" && payload.new) {
+              setRoomMessages((prev: RoomMessage[]) =>
+                prev.map((msg: RoomMessage) =>
+                  msg.id === (payload.new as RoomMessage).id
+                    ? (payload.new as RoomMessage)
+                    : msg
+                )
+              );
+            } else if (payload.eventType === "DELETE" && payload.old) {
+              setRoomMessages((prev: RoomMessage[]) =>
+                prev.filter(
+                  (msg: RoomMessage) =>
+                    msg.id !== (payload.old as RoomMessage).id
+                )
+              );
+            }
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(subscription);
+      };
     }
   }, [currentRoom]);
 
