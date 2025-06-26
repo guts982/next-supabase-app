@@ -1,19 +1,15 @@
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+
 import React from 'react';
-import ShareRoom from './components/ShareRoom';
-import ShareRoomP2P from './components/ShareRoomP2P';
+import PersistentShare from './components/PersistentShare';
+import P2PShare from './components/P2PShare';
 
 const Index = () => {
 
-
-
-
     return (
-        <div className='borde  min-h-[70vh] mt-4 rounded-sm'>
+        <div className='border  min-h-[70vh] mt-4 rounded-sm'>
             <div className='grid gap-2 w-full grid-cols-2'>
-               <ShareRoom />
-               <ShareRoomP2P />
+               <PersistentShare />
+               <P2PShare />
             </div>
         </div>
     );

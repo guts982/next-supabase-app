@@ -1,7 +1,12 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
+import { cookies } from "next/headers";
+import { v4 as uuidv4 } from "uuid";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
+import { Toaster } from "@/components/ui/sonner";
+import { AuthContextProvider } from "@/context/AuthContext";
+
 
 const defaultUrl = process.env.VERCEL_URL
   ? `https://${process.env.VERCEL_URL}`
@@ -19,14 +24,21 @@ const geistSans = Geist({
   subsets: ["latin"],
 });
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+
+  const cookieStore =  await cookies();
+  let clientId = cookieStore.get('client_id')?.value ?? null;
+
+
+
   return (
     <html lang="en" suppressHydrationWarning>
       <body className={`${geistSans.className} antialiased`}>
+        <AuthContextProvider initialClientId={clientId}>
         <ThemeProvider
           attribute="class"
           defaultTheme="system"
@@ -34,7 +46,9 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           {children}
+          <Toaster />
         </ThemeProvider>
+        </AuthContextProvider>
       </body>
     </html>
   );
