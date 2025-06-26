@@ -1,7 +1,6 @@
 import type { Metadata } from "next";
 import { Geist } from "next/font/google";
 import { cookies } from "next/headers";
-import { v4 as uuidv4 } from "uuid";
 import { ThemeProvider } from "next-themes";
 import "./globals.css";
 import { Toaster } from "@/components/ui/sonner";
@@ -31,9 +30,7 @@ export default async function RootLayout({
 }>) {
 
   const cookieStore =  await cookies();
-  let clientId = cookieStore.get('client_id')?.value ?? null;
-
-
+  const clientId = cookieStore.get('client_id')?.value ?? null;
 
   return (
     <html lang="en" suppressHydrationWarning>

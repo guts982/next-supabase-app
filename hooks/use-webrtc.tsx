@@ -1,7 +1,7 @@
 // hooks/useWebRTC.ts
 'use client';
 
-import { createClient } from '@/lib/client';
+import { createClient } from '@/lib/supabase/client';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export type ConnectionState = 'disconnected' | 'connecting' | 'connected';

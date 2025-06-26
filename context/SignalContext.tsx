@@ -8,7 +8,7 @@ import React, {
   useEffect,
   useRef,
 } from "react";
-import { createClient } from "@/lib/client";
+import { createClient } from "@/lib/supabase/client";
 
 interface SignalingContextProps {
   status: string;

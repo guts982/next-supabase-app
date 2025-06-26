@@ -1,6 +1,6 @@
 "use client";
 import React, { useEffect, useState } from "react";
-import { createClient } from "@/lib/client";
+import { createClient } from "@/lib/supabase/client";
 import { useSignalingContext } from "@/context/SignalContext";
 
 const PC_CONFIG = {

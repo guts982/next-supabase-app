@@ -1,6 +1,6 @@
 "use client";
 
-import useP2PShare from "@/hooks/use-p2p-share";
+// import useP2PShare from "@/hooks/use-p2p-share";
 
 type Props = {
     roomId?:string | null
@@ -11,7 +11,7 @@ const Index = ({roomId=null}:Props) => {
     // const {} = useP2PShare();
 
     return (<div>
-            P2P Share Area
+            P2P Share Area {roomId}
     </div>)
 }
 
